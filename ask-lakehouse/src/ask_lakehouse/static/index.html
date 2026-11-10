@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask your lakehouse</title>
+<style>
+  :root { --bg:#fff; --fg:#1b1f24; --muted:#59636e; --line:#d0d7de; --accent:#0969da; --code:#f6f8fa; --bad:#cf222e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --accent:#4493f8; --code:#161b22; --bad:#ff7b72; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, sans-serif; }
+  main { max-width:900px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:1.4rem; margin:0 0 4px; }
+  p.sub { color:var(--muted); margin:0 0 16px; }
+  form { display:flex; gap:8px; }
+  input { flex:1; padding:10px 12px; font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; }
+  button { padding:10px 16px; font:inherit; color:#fff; background:var(--accent); border:0; border-radius:6px; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:wait; }
+  .note { margin:16px 0 0; padding:10px 12px; border:1px solid var(--line); border-radius:6px; }
+  .note.bad { border-color:var(--bad); color:var(--bad); }
+  pre { background:var(--code); border:1px solid var(--line); border-radius:6px; padding:12px; overflow-x:auto; }
+  .scroll { overflow-x:auto; margin-top:16px; }
+  table { border-collapse:collapse; width:100%; }
+  th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-weight:600; }
+  details { margin-top:16px; } summary { cursor:pointer; color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Ask your lakehouse</h1>
+  <p class="sub">Ask a question about NYC taxi trips. You always see the SQL that produced the answer.</p>
+  <form id="f"><input id="q" placeholder="Which borough has the highest tip rate?" maxlength="1000" autofocus required><button id="b">Ask</button></form>
+  <div id="out"></div>
+</main>
+<script>
+const f = document.getElementById("f"), q = document.getElementById("q"), b = document.getElementById("b"), out = document.getElementById("out");
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+f.addEventListener("submit", async e => {
+  e.preventDefault(); b.disabled = true; out.innerHTML = "<p class='sub'>Thinking…</p>";
+  try {
+    const r = await fetch("/ask", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({question:q.value})});
+    const a = await r.json();
+    if (!r.ok) { out.innerHTML = `<div class="note bad">Request failed.</div>`; return; }
+    let h = "";
+    if (a.status !== "ok") h += `<div class="note bad">${esc(a.message)}</div>`;
+    if (a.assumptions) h += `<div class="note"><b>Assumption:</b> ${esc(a.assumptions)}</div>`;
+    if (a.status === "ok") {
+      h += `<div class="scroll"><table><thead><tr>${a.columns.map(c=>`<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>` +
+           a.rows.map(r=>`<tr>${r.map(v=>`<td>${v===null?"":esc(typeof v==="number"&&!Number.isInteger(v)?v.toLocaleString(undefined,{maximumFractionDigits:4}):typeof v==="number"?v.toLocaleString():v)}</td>`).join("")}</tr>`).join("") +
+           `</tbody></table></div>`;
+      if (a.message) h += `<p class="sub">${esc(a.message)}</p>`;
+    }
+    if (a.sql) h += `<details ${a.status==="ok"?"open":""}><summary>SQL</summary><pre>${esc(a.sql)}</pre></details>`;
+    h += `<p class="sub">${a.latency_ms} ms · ${a.attempts} attempt(s) · ${esc(a.model)}</p>`;
+    out.innerHTML = h;
+  } catch (err) { out.innerHTML = `<div class="note bad">Could not reach the server.</div>`; }
+  finally { b.disabled = false; }
+});
+</script>
+</body>
+</html>

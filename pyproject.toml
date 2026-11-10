@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lakehouse"
+version = "0.1.0"
+description = "Medallion (bronze/silver/gold) lakehouse pipeline on PySpark + Delta Lake using NYC TLC trip data"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pyspark==3.5.3",
+    "delta-spark==3.2.1",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6", "pandas>=2.0", "pyarrow>=15"]
+
+[project.scripts]
+lakehouse = "lakehouse.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+# Unit tests run by default. Delta tests need the Delta jars (Maven access) and a
+# separate Spark session, so they run in their own process: `make test-delta`.
+addopts = "-m 'not delta' -q"
+markers = ["delta: needs Delta Lake jars; run with `pytest -m delta`"]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+
+[tool.ruff]
+line-length = 100

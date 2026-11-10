@@ -1,0 +1,78 @@
+# The semantic layer: the single source of truth for what the assistant may query and what
+# the numbers mean. The prompt, the SQL guardrails and the schema test all read this file.
+dataset: NYC TLC yellow taxi trips, gold layer (aggregated by the lakehouse pipeline)
+
+rules:
+  - Each table is already aggregated. A row is NOT one trip.
+  - To combine rows use SUM on additive columns (trips, revenue, tip_total, fare_total, card_trips)
+    and recompute ratios from the sums. Never average pre-computed averages or rates.
+  - Dates are DATE values; months are text like '2024-03'.
+
+tables:
+  trips_by_zone_day:
+    description: Trips and revenue per pickup zone per day.
+    grain: one row per pickup_date and pu_location_id
+    columns:
+      - {name: pickup_month, type: VARCHAR, description: "Month as 'YYYY-MM'"}
+      - {name: pickup_date, type: DATE, description: Pickup date}
+      - {name: pu_location_id, type: INTEGER, description: "Pickup zone id; joins to dim_zone.location_id"}
+      - {name: trips, type: BIGINT, description: Number of trips}
+      - {name: revenue, type: DOUBLE, description: "Sum of total_amount in USD (fare, tip, fees)"}
+      - {name: avg_distance_miles, type: DOUBLE, description: "Average trip distance for the row's trips"}
+      - {name: avg_duration_min, type: DOUBLE, description: "Average trip duration in minutes for the row's trips"}
+
+  revenue_by_hour:
+    description: Trips and revenue per day and hour of day, all zones combined.
+    grain: one row per pickup_date and pickup_hour
+    columns:
+      - {name: pickup_month, type: VARCHAR, description: "Month as 'YYYY-MM'"}
+      - {name: pickup_date, type: DATE, description: Pickup date}
+      - {name: pickup_hour, type: INTEGER, description: "Hour of day 0-23"}
+      - {name: trips, type: BIGINT, description: Number of trips}
+      - {name: revenue, type: DOUBLE, description: Sum of total_amount in USD}
+      - {name: fare_total, type: DOUBLE, description: Sum of fare_amount in USD (excludes tips and fees)}
+
+  tip_rate_by_borough:
+    description: Tip totals for card-paid trips per pickup borough and month.
+    grain: one row per pickup_month and borough
+    columns:
+      - {name: pickup_month, type: VARCHAR, description: "Month as 'YYYY-MM'"}
+      - {name: borough, type: VARCHAR, description: Pickup borough, values: [Manhattan, Brooklyn, Queens, Bronx, Staten Island, EWR]}
+      - {name: card_trips, type: BIGINT, description: Number of card-paid trips}
+      - {name: tip_total, type: DOUBLE, description: Sum of tips in USD}
+      - {name: fare_total, type: DOUBLE, description: Sum of fare_amount in USD for those trips}
+      - {name: tip_rate, type: DOUBLE, description: "tip_total / fare_total for this row"}
+
+  dim_zone:
+    description: Taxi zone lookup.
+    grain: one row per zone
+    columns:
+      - {name: location_id, type: INTEGER, description: Zone id}
+      - {name: borough, type: VARCHAR, description: Borough name}
+      - {name: zone, type: VARCHAR, description: Zone name, e.g. 'JFK Airport'}
+      - {name: service_zone, type: VARCHAR, description: Service zone, values: [Yellow Zone, Boro Zone, Airports, EWR]}
+
+joins:
+  - trips_by_zone_day.pu_location_id = dim_zone.location_id
+
+metrics:
+  - name: total_trips
+    sql: SUM(trips)
+    notes: From trips_by_zone_day or revenue_by_hour.
+  - name: total_revenue
+    sql: SUM(revenue)
+  - name: avg_trip_distance_miles
+    sql: SUM(avg_distance_miles * trips) / SUM(trips)
+    notes: Trip-weighted. Never AVG(avg_distance_miles).
+  - name: avg_trip_duration_min
+    sql: SUM(avg_duration_min * trips) / SUM(trips)
+    notes: Trip-weighted. Never AVG(avg_duration_min).
+  - name: tip_rate
+    sql: SUM(tip_total) / SUM(fare_total)
+    notes: Fare-weighted. Never AVG(tip_rate). Card trips only.
+  - name: avg_tip_per_card_trip
+    sql: SUM(tip_total) / SUM(card_trips)
+
+caveats:
+  - Cash tips are not recorded by the source, so tip figures cover card-paid trips only.
+  - Only yellow taxi trips are included. There is no driver, passenger, weather or cancellation data.

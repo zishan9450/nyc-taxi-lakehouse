@@ -1,0 +1,14 @@
+FROM apache/airflow:2.10.5-python3.11
+
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openjdk-17-jre-headless \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sfn "$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")" /usr/lib/jvm/default-java
+ENV JAVA_HOME=/usr/lib/jvm/default-java
+
+USER airflow
+COPY --chown=airflow pyproject.toml README.md /opt/lakehouse/
+COPY --chown=airflow src /opt/lakehouse/src
+RUN pip install --no-cache-dir /opt/lakehouse
+RUN SPARK_DRIVER_MEMORY=1g python -c "from lakehouse.spark import get_spark; get_spark().stop()"

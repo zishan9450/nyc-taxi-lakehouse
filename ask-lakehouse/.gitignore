@@ -1,0 +1,9 @@
+data/*.duckdb
+data/gold/
+logs/
+__pycache__/
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.env

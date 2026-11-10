@@ -1,0 +1,23 @@
+services:
+  # One-off CLI run:  docker compose run --rm pipeline run --month 2024-02
+  pipeline:
+    build: .
+    environment:
+      LAKE_ROOT: /data/lake
+    volumes:
+      - ./lake:/data/lake
+
+  # Airflow UI on http://localhost:8080 (admin password is printed in the logs)
+  airflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    command: standalone
+    ports:
+      - "8080:8080"
+    environment:
+      LAKE_ROOT: /data/lake
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./lake:/data/lake
