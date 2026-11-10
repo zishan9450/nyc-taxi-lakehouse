@@ -18,5 +18,5 @@ jobs:
       - run: ruff check src tests dags
       - name: Unit tests (plain Spark)
         run: pytest
-      - name: Pipeline tests on tiny files (Delta: idempotency, schema evolution, MERGE, gates)
+      - name: "Pipeline tests on tiny files (Delta: idempotency, schema evolution, MERGE, gates)"
         run: pytest -m delta
